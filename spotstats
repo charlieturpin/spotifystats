@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Spotify Stats Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .section { margin-bottom: 2em; }
+    h2 { margin-top: 1em; }
+    .track, .artist { margin-bottom: 0.5em; }
+  </style>
+</head>
+<body>
+  <h1>Spotify Statistics</h1>
+  <button id="login">Login with Spotify</button>
+  <div id="stats"></div>
+
+  <script>
+    // --- CONFIG ---
+    const CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID';
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
+    const SCOPES = [
+      'user-top-read',
+      'user-read-recently-played',
+      'user-library-read'
+    ].join(' ');
+
+    // --- AUTH ---
+    function getAccessToken() {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      return params.get('access_token');
+    }
+
+    function login() {
+      const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}`
+        + `&response_type=token`
+        + `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`
+        + `&scope=${encodeURIComponent(SCOPES)}`;
+      window.location = authUrl;
+    }
+
+    document.getElementById('login').onclick = login;
+
+    // --- API ---
+    async function fetchApi(endpoint, token) {
+      const res = await fetch(`https://api.spotify.com/v1/${endpoint}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    async function loadStats(token) {
+      const statsDiv = document.getElementById('stats');
+      statsDiv.innerHTML = '<p>Loading...</p>';
+      try {
+        // Top Tracks
+        const topTracks = await fetchApi('me/top/tracks?limit=10', token);
+        let topTracksHtml = '<div class="section"><h2>Top Tracks</h2>';
+        topTracks.items.forEach((item, i) => {
+          topTracksHtml += `<div class="track">${i+1}. ${item.name} by ${item.artists.map(a=>a.name).join(', ')}</div>`;
+        });
+        topTracksHtml += '</div>';
+
+        // Top Artists
+        const topArtists = await fetchApi('me/top/artists?limit=10', token);
+        let topArtistsHtml = '<div class="section"><h2>Top Artists</h2>';
+        topArtists.items.forEach((item, i) => {
+          topArtistsHtml += `<div class="artist">${i+1}. ${item.name}</div>`;
+        });
+        topArtistsHtml += '</div>';
+
+        // Recently Played
+        const recent = await fetchApi('me/player/recently-played?limit=10', token);
+        let recentHtml = '<div class="section"><h2>Recently Played</h2>';
+        recent.items.forEach((item, i) => {
+          recentHtml += `<div class="track">${i+1}. ${item.track.name} by ${item.track.artists.map(a=>a.name).join(', ')}</div>`;
+        });
+        recentHtml += '</div>';
+
+        statsDiv.innerHTML = topTracksHtml + topArtistsHtml + recentHtml;
+      } catch (e) {
+        statsDiv.innerHTML = `<p>Error: ${e.message}</p>`;
+      }
+    }
+
+    // --- MAIN ---
+    const accessToken = getAccessToken();
+    if (accessToken) {
+      document.getElementById('login').style.display = 'none';
+      loadStats(accessToken);
+    }
+  </script>
+</body>
+</html>
